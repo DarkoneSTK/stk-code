@@ -535,7 +535,7 @@ void ServerLobby::initServerStatsTable()
     easySQLQuery(query);
 
     uint32_t last_host_id = 0;
-    query = StringUtils::insertValues("SELECT MAX(host_id) FROM %s;",
+    query = StringUtils::insertValues("SELECT MAX(host_id) FROM \"%s\";",
         m_server_stats_table.c_str());
     ret = sqlite3_prepare_v2(m_db, query.c_str(), -1, &stmt, 0);
     if (ret == SQLITE_OK)
@@ -566,7 +566,7 @@ void ServerLobby::initServerStatsTable()
 
     // Update disconnected time (if stk crashed it will not be written)
     query = StringUtils::insertValues(
-        "UPDATE %s SET disconnected_time = datetime('now') "
+        "UPDATE \"%s\" SET disconnected_time = datetime('now') "
         "WHERE connected_time = disconnected_time;",
         m_server_stats_table.c_str());
     easySQLQuery(query);
@@ -592,7 +592,7 @@ void ServerLobby::writeDisconnectInfoTable(STKPeer* peer)
     if (m_server_stats_table.empty())
         return;
     std::string query = StringUtils::insertValues(
-        "UPDATE %s SET disconnected_time = datetime('now'), "
+        "UPDATE \"%s\" SET disconnected_time = datetime('now'), "
         "ping = %d, packet_loss = %d "
         "WHERE host_id = %u;", m_server_stats_table.c_str(),
         peer->getAveragePing(), peer->getPacketLoss(),
@@ -1146,7 +1146,7 @@ void ServerLobby::pollDatabase()
         ServerConfig::m_player_reports_expired_days != 0.0f)
     {
         std::string query = StringUtils::insertValues(
-            "DELETE FROM %s "
+            "DELETE FROM \"%s\" "
             "WHERE datetime"
             "(reported_time, '+%f days') < datetime('now');",
             ServerConfig::m_player_reports_table.c_str(),
@@ -1171,7 +1171,7 @@ void ServerLobby::pollDatabase()
     if (peers.empty() || exist_hosts.empty())
     {
         query = StringUtils::insertValues(
-            "UPDATE %s SET disconnected_time = datetime('now') "
+            "UPDATE \"%s\" SET disconnected_time = datetime('now') "
             "WHERE connected_time = disconnected_time;",
             m_server_stats_table.c_str());
     }
@@ -1324,7 +1324,7 @@ std::string ServerLobby::ip2Country(const SocketAddress& addr) const
 
     std::string cc_code;
     std::string query = StringUtils::insertValues(
-        "SELECT country_code FROM %s "
+        "SELECT country_code FROM \"%s\" "
         "WHERE `ip_start` <= %d AND `ip_end` >= %d "
         "ORDER BY `ip_start` DESC LIMIT 1;",
         ServerConfig::m_ip_geolocation_table.c_str(), addr.getIP(),
@@ -1366,7 +1366,7 @@ std::string ServerLobby::ipv62Country(const SocketAddress& addr) const
     std::string cc_code;
     const std::string& ipv6 = addr.toString(false/*show_port*/);
     std::string query = StringUtils::insertValues(
-        "SELECT country_code FROM %s "
+        "SELECT country_code FROM \"%s\" "
         "WHERE `ip_start` <= upperIPv6(\"%s\") AND `ip_end` >= upperIPv6(\"%s\") "
         "ORDER BY `ip_start` DESC LIMIT 1;",
         ServerConfig::m_ipv6_geolocation_table.c_str(), ipv6.c_str(),
@@ -1427,7 +1427,7 @@ void ServerLobby::writePlayerReport(Event* event)
     if (ServerConfig::m_ipv6_connection)
     {
         query = StringUtils::insertValues(
-            "INSERT INTO %s "
+            "INSERT INTO \"%s\" "
             "(server_uid, reporter_ip, reporter_ipv6, reporter_online_id, reporter_username, "
             "info, reporting_ip, reporting_ipv6, reporting_online_id, reporting_username) "
             "VALUES (?, %u, \"%s\", %u, ?, ?, %u, \"%s\", %u, ?);",
@@ -1442,7 +1442,7 @@ void ServerLobby::writePlayerReport(Event* event)
     else
     {
         query = StringUtils::insertValues(
-            "INSERT INTO %s "
+            "INSERT INTO \"%s\" "
             "(server_uid, reporter_ip, reporter_online_id, reporter_username, "
             "info, reporting_ip, reporting_online_id, reporting_username) "
             "VALUES (?, %u, %u, ?, ?, %u, %u, ?);",
@@ -3535,7 +3535,7 @@ void ServerLobby::saveIPBanTable(const SocketAddress& addr)
         return;
 
     std::string query = StringUtils::insertValues(
-        "INSERT INTO %s (ip_start, ip_end) "
+        "INSERT INTO \"%s\" (ip_start, ip_end) "
         "VALUES (%u, %u);",
         ServerConfig::m_ip_ban_table.c_str(), addr.getIP(), addr.getIP());
     easySQLQuery(query);
@@ -4118,7 +4118,7 @@ void ServerLobby::handleUnencryptedConnection(std::shared_ptr<STKPeer> peer,
     if (ServerConfig::m_ipv6_connection && peer->getAddress().isIPv6())
     {
         query = StringUtils::insertValues(
-            "INSERT INTO %s "
+            "INSERT INTO \"%s\" "
             "(host_id, ip, ipv6 ,port, online_id, username, player_num, "
             "country_code, version, os, ping, addon_karts_count, addon_tracks_count, "
             "addon_arenas_count, addon_soccers_count) "
@@ -4132,7 +4132,7 @@ void ServerLobby::handleUnencryptedConnection(std::shared_ptr<STKPeer> peer,
     else
     {
         query = StringUtils::insertValues(
-            "INSERT INTO %s "
+            "INSERT INTO \"%s\" "
             "(host_id, ip, port, online_id, username, player_num, "
             "country_code, version, os, ping, addon_karts_count, addon_tracks_count, "
             "addon_arenas_count, addon_soccers_count) "
@@ -4482,13 +4482,6 @@ void ServerLobby::handlePlayerVote(Event* event)
 bool ServerLobby::handleAllVotes(PeerVote* winner_vote,
                                  uint32_t* winner_peer_id)
 {
-    // Determine majority agreement when 35% of voting time remains,
-    // reserve some time for kart selection so it's not 50%
-    if (getRemainingVotingTime() / getMaxVotingTime() > 0.35f)
-    {
-        return false;
-    }
-
     // First remove all votes from disconnected hosts
     auto it = m_peers_votes.begin();
     while (it != m_peers_votes.end())
@@ -4608,6 +4601,22 @@ bool ServerLobby::handleAllVotes(PeerVote* winner_vote,
         reverses_rate = float(reverse_vote->second) / cur_players;
     }
 
+    // Start immediately, without delay, if everyone select the same things
+    if (tracks_rate == 1.0f && laps_rate == 1.0f && reverses_rate == 1.0f)
+    {
+        auto closest_lap = m_peers_votes.begin();
+        *winner_peer_id = closest_lap->first;
+        *winner_vote = closest_lap->second;
+        return true;
+    }
+
+    // Determine majority agreement when 35% of voting time remains,
+    // reserve some time for kart selection so it's not 50%
+    if (getRemainingVotingTime() / getMaxVotingTime() > 0.35f)
+    {
+        return false;
+    }
+
     // End early if there is majority agreement which is all entries rate > 0.5
     it = m_peers_votes.begin();
     if (tracks_rate > 0.5f && laps_rate > 0.5f && reverses_rate > 0.5f)
@@ -4631,10 +4640,11 @@ bool ServerLobby::handleAllVotes(PeerVote* winner_vote,
         *winner_vote = it->second;
         return true;
     }
-    else if (isVotingOver())
+
+    // Pick the best lap (or soccer goal / time) from only the top track
+    // if no majority agreement from all
+    if (isVotingOver())
     {
-        // Pick the best lap (or soccer goal / time) from only the top track
-        // if no majority agreement from all
         int diff = std::numeric_limits<int>::max();
         auto closest_lap = m_peers_votes.begin();
         while (it != m_peers_votes.end())
@@ -5049,7 +5059,7 @@ void ServerLobby::testBannedForIP(STKPeer* peer) const
     unsigned ip_start = 0;
     unsigned ip_end = 0;
     std::string query = StringUtils::insertValues(
-        "SELECT rowid, ip_start, ip_end, reason, description FROM %s "
+        "SELECT rowid, ip_start, ip_end, reason, description FROM \"%s\" "
         "WHERE ip_start <= %u AND ip_end >= %u "
         "AND datetime('now') > datetime(starting_time) AND "
         "(expired_days is NULL OR datetime"
@@ -5092,7 +5102,7 @@ void ServerLobby::testBannedForIP(STKPeer* peer) const
     if (row_id != -1)
     {
         query = StringUtils::insertValues(
-            "UPDATE %s SET trigger_count = trigger_count + 1, "
+            "UPDATE \"%s\" SET trigger_count = trigger_count + 1, "
             "last_trigger = datetime('now') "
             "WHERE ip_start = %u AND ip_end = %u;",
             ServerConfig::m_ip_ban_table.c_str(), ip_start, ip_end);
@@ -5115,7 +5125,7 @@ void ServerLobby::testBannedForIPv6(STKPeer* peer) const
     int row_id = -1;
     std::string ipv6_cidr;
     std::string query = StringUtils::insertValues(
-        "SELECT rowid, ipv6_cidr, reason, description FROM %s "
+        "SELECT rowid, ipv6_cidr, reason, description FROM \"%s\" "
         "WHERE insideIPv6CIDR(ipv6_cidr, ?) = 1 "
         "AND datetime('now') > datetime(starting_time) AND "
         "(expired_days is NULL OR datetime"
@@ -5164,7 +5174,7 @@ void ServerLobby::testBannedForIPv6(STKPeer* peer) const
     if (row_id != -1)
     {
         query = StringUtils::insertValues(
-            "UPDATE %s SET trigger_count = trigger_count + 1, "
+            "UPDATE \"%s\" SET trigger_count = trigger_count + 1, "
             "last_trigger = datetime('now') "
             "WHERE ipv6_cidr = ?;", ServerConfig::m_ipv6_ban_table.c_str());
         easySQLQuery(query, [ipv6_cidr](sqlite3_stmt* stmt)
@@ -5190,7 +5200,7 @@ void ServerLobby::testBannedForOnlineId(STKPeer* peer,
 
     int row_id = -1;
     std::string query = StringUtils::insertValues(
-        "SELECT rowid, reason, description FROM %s "
+        "SELECT rowid, reason, description FROM \"%s\" "
         "WHERE online_id = %u "
         "AND datetime('now') > datetime(starting_time) AND "
         "(expired_days is NULL OR datetime"
@@ -5230,7 +5240,7 @@ void ServerLobby::testBannedForOnlineId(STKPeer* peer,
     if (row_id != -1)
     {
         query = StringUtils::insertValues(
-            "UPDATE %s SET trigger_count = trigger_count + 1, "
+            "UPDATE \"%s\" SET trigger_count = trigger_count + 1, "
             "last_trigger = datetime('now') "
             "WHERE online_id = %u;",
             ServerConfig::m_online_id_ban_table.c_str(), online_id);
@@ -6303,9 +6313,9 @@ void ServerLobby::handleServerCommand(Event* event,
                 if (!records_table_name.empty())
                 {
                     std::string get_query = StringUtils::insertValues("SELECT username, "
-                        "result FROM %s LEFT JOIN "
+                        "result FROM \"%s\" LEFT JOIN "
                         "(SELECT venue as v, reverse as r, mode as m, laps as l, "
-                        "min(result) as min_res FROM %s group by v, r, m, l) "
+                        "min(result) as min_res FROM \"%s\" group by v, r, m, l) "
                         "ON venue = v and reverse = r and mode = m and laps = l "
                         "WHERE venue = '%s' and reverse = '%s' "
                         "and mode = '%s' and laps = %d and result = min_res;",
@@ -6567,9 +6577,9 @@ void ServerLobby::storeResults()
     if (!records_table_name.empty())
     {
         std::string get_query = StringUtils::insertValues("SELECT username, "
-            "result FROM %s INNER JOIN "
+            "result FROM \"%s\" INNER JOIN "
             "(SELECT venue as v, reverse as r, mode as m, laps as l, "
-            "min(result) as min_res FROM %s group by v, r, m, l) "
+            "min(result) as min_res FROM \"%s\" group by v, r, m, l) "
             "ON venue = v and reverse = r and mode = m and laps = l "
             "and result = min_res "
             "WHERE venue = '%s' and reverse = '%s' "
@@ -6606,7 +6616,7 @@ void ServerLobby::storeResults()
             best_cur_player_name = username;
         }
         std::string query = StringUtils::insertValues(
-            "INSERT INTO %s "
+            "INSERT INTO \"%s\" "
             "(username, venue, reverse, mode, laps, result) "
             "VALUES ('%s', '%s', '%s', '%s', %d, '%s');",
             m_results_table_name.c_str(), username.c_str(), track_name.c_str(),
@@ -6697,7 +6707,7 @@ void ServerLobby::writeOwnReport(STKPeer* reporter, STKPeer* reporting, const st
     if (ServerConfig::m_ipv6_connection)
     {
         query = StringUtils::insertValues(
-            "INSERT INTO %s "
+            "INSERT INTO \"%s\" "
             "(server_uid, reporter_ip, reporter_ipv6, reporter_online_id, reporter_username, "
             "info, reporting_ip, reporting_ipv6, reporting_online_id, reporting_username) "
             "VALUES (?, %u, \"%s\", %u, ?, ?, %u, \"%s\", %u, ?);",
@@ -6712,7 +6722,7 @@ void ServerLobby::writeOwnReport(STKPeer* reporter, STKPeer* reporting, const st
     else
     {
         query = StringUtils::insertValues(
-            "INSERT INTO %s "
+            "INSERT INTO \"%s\" "
             "(server_uid, reporter_ip, reporter_online_id, reporter_username, "
             "info, reporting_ip, reporting_online_id, reporting_username) "
             "VALUES (?, %u, %u, ?, ?, %u, %u, ?);",
