@@ -29,3 +29,12 @@ This is only a short description.
 13. Allowed `/records` queries to server
 
 Of course, there are some further plans ~~which will be announced when they are implemented or when I realize they cannot~~.
+
+## Records view creation
+
+```sql
+CREATE VIEW "<records_table_name>" AS
+  SELECT username, min(result) AS result, venue, reverse, mode, laps
+  FROM v1_darkone_results
+  GROUP BY username, venue, reverse, mode, laps
+```
