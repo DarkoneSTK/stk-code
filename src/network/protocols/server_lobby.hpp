@@ -33,6 +33,7 @@
 #include <memory>
 #include <mutex>
 #include <set>
+#include <deque>
 
 #ifdef ENABLE_SQLITE3
 #include <sqlite3.h>
@@ -49,6 +50,23 @@ namespace Online
 {
     class Request;
 }
+
+// I know it should be in a more suitable place, but for now I have no idea
+// how to make this with the current system. Sorry. Hope to refactor later.
+
+struct GPScore
+{
+    int score = 0;
+    double time = 0.;
+    bool operator < (const GPScore& rhs) const
+    {
+        return (score < rhs.score || (score == rhs.score && time > rhs.time));
+    }
+    bool operator > (const GPScore& rhs) const
+    {
+        return (score > rhs.score || (score == rhs.score && time < rhs.time));
+    }
+};
 
 class ServerLobby : public LobbyProtocol
 {
@@ -160,6 +178,10 @@ private:
     /** Available karts and tracks for all clients, this will be initialized
      *  with data in server first. */
     std::pair<std::set<std::string>, std::set<std::string> > m_available_kts;
+
+    /** Available karts and tracks for all clients, this will be initialized
+     *  with data in server first. */
+    std::pair<std::set<std::string>, std::set<std::string> > m_entering_kts;
 
     /** Keeps track of the server state. */
     std::atomic_bool m_server_has_loaded_world;
@@ -277,7 +299,23 @@ private:
     
     std::set<std::string> m_tournament_referees;
 
+    std::set<std::string> m_temp_banned;
+
+    std::deque<std::string> m_tracks_queue;
+
+    std::map<std::string, GPScore> m_gp_scores;
+
     int m_tournament_game;
+
+    int m_fixed_lap;
+
+    std::vector<int> m_scoring_int_params;
+
+    std::string m_scoring_type;
+
+    std::set<STKPeer*> m_default_always_spectate_peers;
+
+    std::set<std::string> m_usernames_white_list;
 
     // connection management
     void clientDisconnected(Event* event);
@@ -403,6 +441,16 @@ private:
     void changeColors();
     void sendStringToPeer(std::string& s, std::shared_ptr<STKPeer>& peer) const;
     void sendStringToAllPeers(std::string& s);
+    bool canRace(std::shared_ptr<STKPeer>& peer) const;
+    bool canRace(STKPeer* peer) const;
+    bool hasHostRights(std::shared_ptr<STKPeer>& peer) const;
+    bool hasHostRights(STKPeer* peer) const;
+    void loadTracksQueueFromConfig();
+    void sendGnuStandingsToPeer(std::shared_ptr<STKPeer> peer) const;
+    void sendGrandPrixStandingsToPeer(std::shared_ptr<STKPeer> peer) const;
+    void loadCustomScoring();
+    void updateWorldScoring();
+    void loadWhiteList();
 public:
              ServerLobby();
     virtual ~ServerLobby();
